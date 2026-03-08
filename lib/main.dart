@@ -1,82 +1,108 @@
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:barcode_scan2/barcode_scan2.dart';
+import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(CatFoodCheckApp());
+  runApp(const CatFoodCheckApp());
 }
 
 class CatFoodCheckApp extends StatelessWidget {
+  const CatFoodCheckApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CatFoodCheck',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: ScanPage(),
+      theme: ThemeData(
+        primarySwatch: Colors.teal,
+      ),
+      home: const ScannerPage(),
     );
   }
 }
 
-class ScanPage extends StatefulWidget {
+class ScannerPage extends StatefulWidget {
+  const ScannerPage({super.key});
+
   @override
-  _ScanPageState createState() => _ScanPageState();
+  State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScanPageState extends State<ScanPage> {
-  String resultText = "";
+class _ScannerPageState extends State<ScannerPage> {
+  bool scanned = false;
+  String resultText = "Scan a cat food barcode";
 
-  Future<void> scanAndCheck() async {
+  Future<void> fetchProduct(String barcode) async {
     try {
-      var scanResult = await BarcodeScanner.scan();
-      String ean = scanResult.rawContent;
-
-      if (ean.isEmpty) return;
-
-      final response = await http
-          .get(Uri.parse('https://catfoodcheck.onrender.com/scan/$ean'));
+      final response = await http.get(
+        Uri.parse("https://catfoodcheck.onrender.com/scan/$barcode"),
+      );
 
       if (response.statusCode == 200) {
-        var data = json.decode(response.body);
+        final data = jsonDecode(response.body);
+
         setState(() {
-          if (data['wsava'] == true) {
-            resultText =
-                "${data['brand']} ${data['product']}\n✅ Cumple WSAVA";
-          } else {
-            resultText =
-                "${data['brand']} ${data['product']}\n❌ No cumple WSAVA";
-          }
+          resultText =
+              "${data['product']}\nBrand: ${data['brand']}\nWSAVA: ${data['wsava'] ? "✅ Yes" : "❌ No"}";
         });
       } else {
         setState(() {
-          resultText = "Error fetching product info";
+          resultText = "Product not found";
         });
       }
     } catch (e) {
       setState(() {
-        resultText = "Error: $e";
+        resultText = "Error connecting to API";
       });
+    }
+
+    scanned = false;
+  }
+
+  void onDetect(BarcodeCapture capture) {
+    if (scanned) return;
+
+    final List<Barcode> barcodes = capture.barcodes;
+
+    if (barcodes.isNotEmpty) {
+      final String? code = barcodes.first.rawValue;
+
+      if (code != null) {
+        scanned = true;
+        fetchProduct(code);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("CatFoodCheck")),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton(
-                onPressed: scanAndCheck, child: Text("Scan Cat Food")),
-            SizedBox(height: 20),
-            Text(
-              resultText,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20),
+      appBar: AppBar(
+        title: const Text("CatFoodCheck"),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            flex: 4,
+            child: MobileScanner(
+              onDetect: onDetect,
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  resultText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
