@@ -54,6 +54,7 @@ cd android
 
 ## Git
 
+- **Nombre en GitHub: `andreu-marbor/catfoodcheck-app`** (con guion) — el directorio local usa guion bajo. `gh` y URLs deben usar el nombre con guion.
 - Rama local `main` con upstream configurado; `git push` / `git pull` normales funcionan (no hace falta `HEAD:main`, a diferencia de otros repos de esta carpeta padre).
 - Sin CI, sin pre-commit, sin `opencode.json` ni otros ficheros de instrucciones.
 
