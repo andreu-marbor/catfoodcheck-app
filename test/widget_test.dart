@@ -1,30 +1,105 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:catfoodcheck_app/main.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('fetchProduct', () {
+    test('devuelve ProductResult cuando wsava es true', () async {
+      final client = MockClient((request) async => http.Response(
+            '{"product": "Sterilised 37", "brand": "Royal Canin", "wsava": true}',
+            200,
+            headers: {'content-type': 'application/json'},
+          ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      final result = await fetchProduct(client, '1234567890123');
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      expect(result, isA<ProductResult>());
+      expect(result.message, contains('Royal Canin'));
+      expect(result.message, contains('✅ Yes'));
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('devuelve ProductResult cuando wsava es false', () async {
+      final client = MockClient((request) async => http.Response(
+            '{"product": "Pienso", "brand": "Marca X", "wsava": false}',
+            200,
+            headers: {'content-type': 'application/json'},
+          ));
+
+      final result = await fetchProduct(client, '1234567890123');
+
+      expect(result, isA<ProductResult>());
+      expect(result.message, contains('❌ No'));
+    });
+
+    test('devuelve InvalidBodyResult si wsava viene null (bug conocido)', () async {
+      final client = MockClient((request) async => http.Response(
+            '{"product": "Pienso", "brand": "Marca X", "wsava": null}',
+            200,
+            headers: {'content-type': 'application/json'},
+          ));
+
+      final result = await fetchProduct(client, '1234567890123');
+
+      expect(result, isA<InvalidBodyResult>());
+    });
+
+    test('devuelve InvalidBodyResult si el cuerpo no es JSON válido', () async {
+      final client = MockClient(
+        (request) async => http.Response('<html>error</html>', 200),
+      );
+
+      final result = await fetchProduct(client, '1234567890123');
+
+      expect(result, isA<InvalidBodyResult>());
+    });
+
+    test('devuelve NotFoundResult ante un 404', () async {
+      final client = MockClient(
+        (request) async => http.Response('not found', 404),
+      );
+
+      final result = await fetchProduct(client, '0000000000000');
+
+      expect(result, isA<NotFoundResult>());
+      expect(result.message, 'Product not found');
+    });
+
+    test('devuelve NetworkErrorResult si la petición lanza', () async {
+      final client = MockClient(
+        (request) async => throw http.ClientException('sin red'),
+      );
+
+      final result = await fetchProduct(client, '1234567890123');
+
+      expect(result, isA<NetworkErrorResult>());
+    });
+
+    test('devuelve TimeoutResult si el backend tarda demasiado', () async {
+      final client = MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        return http.Response('{}', 200);
+      });
+
+      final result = await fetchProduct(
+        client,
+        '1234567890123',
+        timeout: const Duration(milliseconds: 10),
+      );
+
+      expect(result, isA<TimeoutResult>());
+    });
+
+    test('construye la URL del endpoint correctamente', () async {
+      Uri? requested;
+      final client = MockClient((request) async {
+        requested = request.url;
+        return http.Response('{"product": "P", "brand": "B", "wsava": true}', 200);
+      });
+
+      await fetchProduct(client, '8412345678901');
+
+      expect(requested, Uri.parse('https://catfoodcheck.onrender.com/scan/8412345678901'));
+    });
   });
 }
